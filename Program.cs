@@ -1,0 +1,211 @@
+using Lib_System.Data;
+using Lib_System.Models;
+using System.Data;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Lib_System.Repositories;
+using Lib_System.Repositories.Interfaces;
+using Lib_System.Services;
+using Lib_System.Services.Interfaces;
+using System.Reflection;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllersWithViews();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IPaymentWorkflowService, PaymentWorkflowService>();
+builder.Services.AddScoped<IOverdueFineService, OverdueFineService>();
+builder.Services.AddScoped<IFinePaymentService, FinePaymentService>();
+builder.Services.Configure<StripeSettings>(builder.Configuration.GetSection("Stripe"));
+builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
+builder.Services.AddHostedService<ReservationExpiryWorker>();
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
+builder.Services.AddScoped<IBookRepository, BookRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IAuthorRepository, AuthorRepository>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+builder.Services.AddScoped<IFineRepository, FineRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IBorrowingService, BorrowingService>();
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IAuthorService, AuthorService>();
+builder.Services.AddScoped<IBookService, BookService>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IFineService, FineService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/Account/Login";
+        options.AccessDeniedPath = "/Account/AccessDenied";
+    });
+
+var app = builder.Build();
+
+// Workaround: some dev environments or compiled artifacts may request a specific
+// SixLabors.ImageSharp assembly version that isn't present. Attempt to resolve
+// SixLabors.ImageSharp at runtime by loading any available copy from the app folder
+// so reflection type scanning doesn't fail with ReflectionTypeLoadException.
+// This is a best-effort resolver; real fix is to ensure a single consistent
+// ImageSharp package version is referenced by all projects.
+System.Runtime.Loader.AssemblyLoadContext.Default.Resolving += (context, name) =>
+{
+    try
+    {
+        if (!string.Equals(name.Name, "SixLabors.ImageSharp", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var baseDir = AppContext.BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory;
+        var candidate = Path.Combine(baseDir, "SixLabors.ImageSharp.dll");
+        if (System.IO.File.Exists(candidate))
+        {
+            return context.LoadFromAssemblyPath(candidate);
+        }
+
+        // try to find any file named SixLabors.ImageSharp.dll in the bin
+        var found = Directory.EnumerateFiles(baseDir, "SixLabors.ImageSharp.dll", SearchOption.AllDirectories).FirstOrDefault();
+        if (!string.IsNullOrEmpty(found))
+            return context.LoadFromAssemblyPath(found);
+    }
+    catch { /* swallow - resolution is best-effort */ }
+    return null;
+};
+
+// Apply any pending EF Core migrations at startup so the database schema
+// matches the model (ensures tables such as Fines exist) and verify the
+// Fines table is present after migration.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    db.Database.Migrate();
+
+    var connection = db.Database.GetDbConnection();
+    try
+    {
+        if (connection.State == ConnectionState.Closed)
+            connection.Open();
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Fines'";
+        var result = cmd.ExecuteScalar();
+        var count = Convert.ToInt32(result ?? 0);
+
+        if (count == 0)
+        {
+            logger.LogError("After migration, the 'Fines' table was not found in the target database.");
+        }
+        else
+        {
+            logger.LogInformation("Verified: 'Fines' table exists in the target database.");
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger2 = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger2.LogError(ex, "Error while verifying presence of 'Fines' table after migration.");
+    }
+    finally
+    {
+        if (connection.State == ConnectionState.Open)
+            connection.Close();
+    }
+}
+
+// Configure the HTTP request pipeline.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Home/Error");
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseRouting();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Path.StartsWithSegments("/css") &&
+        !context.Request.Path.StartsWithSegments("/js") &&
+        !context.Request.Path.StartsWithSegments("/lib"))
+    {
+        await context.RequestServices.GetRequiredService<IPaymentWorkflowService>().ExpireAsync();
+        await context.RequestServices.GetRequiredService<IOverdueFineService>().SynchronizeAsync();
+    }
+    await next();
+});
+
+app.MapStaticAssets();
+
+try
+{
+    app.MapControllerRoute(
+        name: "default",
+        pattern: "{controller=Home}/{action=Index}/{id?}")
+        .WithStaticAssets();
+}
+catch (ReflectionTypeLoadException ex)
+{
+    // Log loader exceptions for diagnosis then rethrow so the exception helper shows full context
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "ReflectionTypeLoadException while mapping controller routes");
+    foreach (var le in ex.LoaderExceptions ?? Array.Empty<Exception>())
+    {
+        logger.LogError(le, "LoaderException: {Message}", le.Message);
+    }
+    throw;
+}
+
+await SeedDefaultUsersAsync(app.Services);
+
+app.Run();
+
+static async Task SeedDefaultUsersAsync(IServiceProvider services)
+{
+    using var scope = services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var passwordHasher = new PasswordHasher<User>();
+
+    var roles = await context.Roles.ToDictionaryAsync(r => r.RoleName);
+
+    async Task EnsureUserAsync(string roleName, string name, string email, string username, string password)
+    {
+        if (!roles.TryGetValue(roleName, out var role) || await context.Users.AnyAsync(u => u.Username == username))
+        {
+            return;
+        }
+
+        var user = new User
+        {
+            Name = name,
+            Email = email,
+            Username = username,
+            RoleId = role.RoleId,
+            Status = "Active",
+            RegistrationDate = DateTime.Today,
+            CreatedDate = DateTime.Now
+        };
+
+        user.PasswordHash = passwordHasher.HashPassword(user, password);
+        context.Users.Add(user);
+    }
+
+    await EnsureUserAsync("Admin", "Admin Supervisor", "admin@library.local", "admin", "Admin@123");
+    await EnsureUserAsync("Manager", "Library Manager", "manager@library.local", "manager", "Manager@123");
+    await EnsureUserAsync("Member", "Library Member", "member@library.local", "member", "Member@123");
+
+    await context.SaveChangesAsync();
+}

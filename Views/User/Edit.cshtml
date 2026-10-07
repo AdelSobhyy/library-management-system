@@ -1,0 +1,74 @@
+@model Lib_System.ViewModels.UserFormViewModel
+
+@{
+    ViewData["Title"] = "Edit User";
+}
+
+<h1>Edit User</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <form asp-action="Edit">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <input type="hidden" asp-for="UserId" />
+
+            <div class="form-group mb-3">
+                <label asp-for="Name" class="control-label"></label>
+                <input asp-for="Name" class="form-control" placeholder="Enter full name" />
+                <span asp-validation-for="Name" class="text-danger"></span>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="Email" class="control-label"></label>
+                <input asp-for="Email" class="form-control" readonly />
+                <small class="form-text text-muted">Email can't be changed here.</small>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="Password" class="control-label"></label>
+                <input asp-for="Password" class="form-control" placeholder="Leave blank to keep current password" />
+                <span asp-validation-for="Password" class="text-danger"></span>
+                <small class="form-text text-muted">Enter a new password to change it; leave blank to keep the existing password.</small>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="Username" class="control-label"></label>
+                <input asp-for="Username" class="form-control" placeholder="Enter username" />
+                <span asp-validation-for="Username" class="text-danger"></span>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="Phone" class="control-label"></label>
+                <input asp-for="Phone" class="form-control" placeholder="Enter phone number" />
+                <span asp-validation-for="Phone" class="text-danger"></span>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="Address" class="control-label"></label>
+                <textarea asp-for="Address" class="form-control" placeholder="Enter street address"></textarea>
+                <span asp-validation-for="Address" class="text-danger"></span>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="RoleId" class="control-label"></label>
+                <select asp-for="RoleId" asp-items="Model.Roles" class="form-select">
+                    <option value="">Select a role</option>
+                </select>
+                <span asp-validation-for="RoleId" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <input type="submit" value="Save" class="btn btn-primary" />
+                <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+
+        <hr class="my-4" />
+        <p class="text-muted mb-2">Account status is managed separately from profile details.</p>
+        <a asp-action="Deactivate" asp-route-id="@Model.UserId" class="btn btn-outline-secondary">Change Account Status</a>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

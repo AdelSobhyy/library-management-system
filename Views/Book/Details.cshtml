@@ -1,0 +1,93 @@
+@model Lib_System.Models.Book
+
+@{
+    ViewData["Title"] = "Book Details";
+    var authors = Model.BookAuthors.Select(ba => ba.Author).Where(a => a != null).ToList();
+    var authorNames = string.Join(", ", authors.Select(a => a!.Name));
+}
+
+<div class="book-detail">
+    <div class="book-detail-cover">
+        <div class="book-cover cover-@(Model.BookId % 6)">
+            <partial name="_CoverImage" model="Model" />
+            @if (Model.CoverImage == null) { <span class="cover-title">@Model.Title</span> }
+            <span class="badge bg-@(Model.AvailabilityStatus == "Available" ? "success" : "secondary")">@Model.AvailabilityStatus</span>
+        </div>
+    </div>
+    <div class="book-detail-body">
+        <h1>@Model.Title</h1>
+        <p class="book-detail-author">@(authorNames.Length > 0 ? authorNames : "Unknown author")</p>
+
+        <div class="book-detail-tags">
+            @if (Model.Category != null)
+            {
+                <a asp-controller="Category" asp-action="Details" asp-route-id="@Model.CategoryId" class="badge bg-info">@Model.Category.Name</a>
+            }
+            <span class="badge bg-secondary">@Model.PublicationYear</span>
+            <span class="badge bg-secondary">ISBN @Model.ISBN</span>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Category?.Description))
+        {
+            <p class="book-detail-description">@Model.Category.Description</p>
+        }
+
+        <div class="book-detail-grid">
+            <div>
+                <span class="detail-label">Author</span>
+                <strong>@(authorNames.Length > 0 ? authorNames : "-")</strong>
+            </div>
+            <div>
+                <span class="detail-label">Category</span>
+                <strong>@(Model.Category?.Name ?? "-")</strong>
+            </div>
+            <div>
+                <span class="detail-label">Published</span>
+                <strong>@Model.PublicationYear</strong>
+            </div>
+            <div>
+                <span class="detail-label">ISBN</span>
+                <strong>@Model.ISBN</strong>
+            </div>
+            <div>
+                <span class="detail-label">Price</span>
+                <strong>@Model.Price.ToUsd()</strong>
+            </div>
+            @if (!User.IsInRole("Member"))
+            {
+                <div>
+                    <span class="detail-label">Manager</span>
+                    <strong>@(Model.Manager?.Name ?? "Unassigned")</strong>
+                </div>
+            }
+        </div>
+
+        <div class="book-detail-actions">
+            @if (User.IsInRole("Member") && Model.AvailabilityStatus == "Available")
+            {
+                <a asp-controller="Borrowing" asp-action="Create" asp-route-bookId="@Model.BookId" class="btn btn-primary">Borrow this book - @Model.Price.ToUsd()</a>
+            }
+            @if (User.IsInRole("Manager"))
+            {
+                <a asp-action="Edit" asp-route-id="@Model.BookId" class="btn btn-primary"><i data-lucide="pencil" aria-hidden="true"></i>Edit</a>
+            }
+            @{ var returnUrl = (string?)ViewData["ReturnUrl"] ?? Url.Action("Index"); }
+            <a href="@returnUrl" class="btn btn-secondary">Back</a>
+        </div>
+
+        @{
+            var withBio = authors.Where(a => !string.IsNullOrWhiteSpace(a!.Biography)).ToList();
+        }
+        @if (withBio.Any())
+        {
+            <div class="book-detail-authors">
+                <h2>About the author@(withBio.Count > 1 ? "s" : "")</h2>
+                @foreach (var author in withBio)
+                {
+                    <h3>@author!.Name</h3>
+                    <p>@author.Biography</p>
+                }
+            </div>
+        }
+    </div>
+</div>

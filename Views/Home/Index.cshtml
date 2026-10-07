@@ -1,0 +1,156 @@
+@model Lib_System.ViewModels.DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var member = User.IsInRole("Member");
+    var manager = User.IsInRole("Manager");
+}
+<div class="page-header">
+    <h1>@(member ? $"Welcome back, {User.Identity?.Name}." : manager ? "Manager Dashboard" : "Administrator Dashboard")</h1>
+    @if (manager)
+    {
+        <a asp-controller="Book" asp-action="Create" class="btn btn-primary"><i data-lucide="plus" aria-hidden="true"></i>Add Book</a>
+    }
+</div>
+@if (member && Model.OverdueBorrowingCount > 0)
+{
+    <div class="alert alert-danger d-flex justify-content-between gap-3">
+        <span>@Model.OverdueBorrowingCount overdue book(s)</span>
+        <a asp-controller="Borrowing" asp-action="Index">View loans</a>
+    </div>
+}
+@if (member && Model.UnpaidFineCount > 0)
+{
+    <div class="alert alert-warning d-flex justify-content-between gap-3">
+        <span>@Model.UnpaidFineCount unpaid fine(s)</span>
+        <a asp-controller="Fine" asp-action="Index">Pay fines</a>
+    </div>
+}
+<div class="dashboard-grid mb-4">
+    <a asp-controller="Book" asp-action="Index" class="summary-card">
+        <i data-lucide="book-open" aria-hidden="true"></i><span class="summary-label">@(member ? "Available Books" : "Total Books")</span>
+        <strong>@(member ? Model.AvailableBookCount : Model.BookCount)</strong>
+        <small>@(member ? $"of {Model.BookCount} in catalog" : $"{Model.AvailableBookCount} available")</small>
+    </a>
+    <a asp-controller="Borrowing" asp-action="Index" class="summary-card">
+        <i data-lucide="clipboard-list" aria-hidden="true"></i><span class="summary-label">Active Borrowings</span>
+        <strong>@Model.ActiveBorrowingCount</strong><small>@Model.OverdueBorrowingCount overdue</small>
+    </a>
+    @if (!member)
+    {
+        <a asp-controller="Payment" asp-action="Index" class="summary-card">
+            <i data-lucide="credit-card" aria-hidden="true"></i><span class="summary-label">Transactions</span>
+            <strong>@Model.PaymentCount</strong><small>@Model.TotalPaidAmount.ToUsd() paid</small>
+        </a>
+        <a asp-controller="Fine" asp-action="Index" class="summary-card">
+            <i data-lucide="circle-alert" aria-hidden="true"></i><span class="summary-label">Unpaid Fines</span>
+            <strong>@Model.UnpaidFineCount</strong><small>outstanding fines</small>
+        </a>
+    }
+</div>
+@if (manager)
+{
+    <nav class="dashboard-shortcuts mb-4" aria-label="Quick actions">
+        <a asp-controller="Book" asp-action="Index"><i data-lucide="book-open" aria-hidden="true"></i>Manage Books</a>
+        <a asp-controller="Borrowing" asp-action="Index"><i data-lucide="clipboard-list" aria-hidden="true"></i>Borrowings</a>
+        <a asp-controller="Borrowing" asp-action="Index" asp-route-status="Early Return Requested"><i data-lucide="undo-2" aria-hidden="true"></i>Return Requests</a>
+        <a asp-controller="Payment" asp-action="Index" asp-route-status="Pending"><i data-lucide="banknote" aria-hidden="true"></i>Pending Payments</a>
+    </nav>
+}
+@if (member)
+{
+    var categories = Model.Books.Where(b => b.Category != null).Select(b => b.Category!)
+        .GroupBy(c => c.CategoryId).Select(g => g.First()).OrderBy(c => c.Name).ToList();
+    <section class="mb-4" id="dashboard-book-grid">
+        <div class="panel-header"><h2>All Books</h2><a asp-controller="Book" asp-action="Index">Advanced search</a></div>
+        <form asp-controller="Book" asp-action="Index" method="get" class="row g-2 mb-3">
+            <div class="col-auto" style="min-width: 240px;">
+                <input type="search" name="searchString" class="form-control" placeholder="Search by title or author..." aria-label="Search by title or author" />
+            </div>
+            <div class="col-auto">
+                <select name="categoryId" class="form-select" aria-label="Filter by category">
+                    <option value="">All categories</option>
+                    @foreach (var category in categories)
+                    {
+                        <option value="@category.CategoryId">@category.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-secondary">Search</button>
+            </div>
+        </form>
+        <partial name="_BookGrid" model="Model.Books" />
+    </section>
+}
+<div class="dashboard-columns">
+    <section class="activity-section">
+        <div class="panel-header">
+            <h2>@(member ? "My Recent Borrowings" : "Recent Borrowings")</h2>
+            <a asp-controller="Borrowing" asp-action="Index">View all</a>
+        </div>
+        @foreach (var borrowing in Model.RecentBorrowings)
+        {
+            <a asp-controller="Borrowing" asp-action="Details" asp-route-id="@borrowing.BorrowingId" class="activity-row">
+                @if (borrowing.Book != null) { <span class="table-book-cover"><partial name="_CoverImage" model="borrowing.Book" /></span> }
+                <div><strong>@(borrowing.Book?.Title ?? "-")</strong>
+                    <small>@(member ? "" : borrowing.User?.Name) @(borrowing.Status is "Reserved" or "Failed" ? "" : $"Due {borrowing.DueDate:yyyy-MM-dd}")</small>
+                </div>
+                <span class="badge bg-@(borrowing.Status == "Failed" ? "danger" : borrowing.Status == "Returned" ? "success" : "warning")">@borrowing.Status</span>
+            </a>
+        }
+        @if (!Model.RecentBorrowings.Any())
+        {
+            <p class="empty-state">No borrowings yet.</p>
+        }
+    </section>
+    <section class="activity-section">
+    @if (member)
+    {
+        <div class="panel-header"><h2>Quick Actions</h2></div>
+        <a asp-controller="Book" asp-action="Index" class="quick-link"><i data-lucide="book-open" aria-hidden="true"></i><span>Browse available books<small>@Model.AvailableBookCount available</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></a>
+        <a asp-controller="Borrowing" asp-action="Index" class="quick-link"><i data-lucide="clipboard-list" aria-hidden="true"></i><span>View my borrowings<small>@Model.ActiveBorrowingCount active loans</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></a>
+        <a asp-controller="Payment" asp-action="Index" class="quick-link"><i data-lucide="credit-card" aria-hidden="true"></i><span>Payment history<small>@Model.PaymentCount transactions</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></a>
+        <a asp-controller="Fine" asp-action="Index" class="quick-link"><i data-lucide="circle-alert" aria-hidden="true"></i><span>My fines<small>@Model.UnpaidFineCount unpaid</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></a>
+    }
+    else
+    {
+        <div class="panel-header"><h2>Recent Payments</h2><a asp-controller="Payment" asp-action="Index">View all</a></div>
+        @foreach (var payment in Model.RecentPayments)
+        {
+            <a asp-controller="Payment" asp-action="Details" asp-route-id="@payment.PaymentId" class="activity-row">
+                <div><strong>@(payment.Borrowing?.User?.Name ?? "-")</strong><small>@(payment.Borrowing?.Book?.Title ?? "-")</small></div>
+                <div class="activity-amount"><strong>@payment.Amount.ToUsd()</strong><span class="badge bg-@(payment.Status == "Paid" ? "success" : payment.Status == "Failed" ? "danger" : "warning")">@payment.Status</span></div>
+            </a>
+        }
+        @if (!Model.RecentPayments.Any()) { <p class="empty-state">No payments yet.</p> }
+    }
+    </section>
+</div>
+@if (!member)
+{
+    <div class="dashboard-footer-metrics"><span><strong>@Model.BookCount</strong> Books in catalog</span><span><strong>@Model.MemberCount</strong> Total members</span><span><strong>@Model.TotalPaidAmount.ToUsd()</strong> Total paid</span></div>
+}
+
+@section Scripts {
+    @if (member)
+    {
+        <script>
+            (function () {
+                const search = document.getElementById('dashboard-book-search');
+                const categorySelect = document.getElementById('dashboard-book-category');
+                const cards = document.querySelectorAll('#dashboard-book-grid .catalog-book');
+                function applyFilter() {
+                    const query = (search?.value || '').trim().toLocaleLowerCase();
+                    const categoryId = categorySelect?.value || '';
+                    cards.forEach(card => {
+                        const matchesText = !query || card.textContent.toLocaleLowerCase().includes(query);
+                        const matchesCategory = !categoryId || card.dataset.category === categoryId;
+                        card.hidden = !(matchesText && matchesCategory);
+                    });
+                }
+                search?.addEventListener('input', applyFilter);
+                categorySelect?.addEventListener('change', applyFilter);
+            })();
+        </script>
+    }
+}

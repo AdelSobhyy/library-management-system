@@ -1,0 +1,105 @@
+@{
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    var action = ViewContext.RouteData.Values["action"]?.ToString();
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var member = User.IsInRole("Member");
+    var name = User.Identity?.Name ?? "";
+    var initial = string.IsNullOrWhiteSpace(name) ? "L" : name.Substring(0, 1).ToUpperInvariant();
+    var links = new List<(string Controller, string Label, string Icon)>
+    {
+        ("Home", "Dashboard", "layout-dashboard"),
+        ("Book", member ? "Browse Books" : "Books", "book-open")
+    };
+    if (User.IsInRole("Admin") || User.IsInRole("Manager"))
+    {
+        links.Add(("Author", "Authors", "pen-line"));
+        links.Add(("Category", "Categories", "tags"));
+    }
+    if (User.IsInRole("Admin")) { links.Add(("User", "Users", "users")); }
+    links.Add(("Borrowing", member ? "My Borrowings" : "Borrowings", "clipboard-list"));
+    links.Add(("Payment", member ? "My Payments" : "Payments", "credit-card"));
+    links.Add(("Fine", member ? "My Fines" : "Fines", "circle-alert"));
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Librarium</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="@(signedIn ? "workspace" : "auth-page") route-@controller?.ToLowerInvariant() action-@action?.ToLowerInvariant()">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    @if (signedIn)
+    {
+        <aside class="sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="app-navigation" aria-label="Main navigation">
+            <div class="sidebar-brand">
+                <a asp-controller="Home" asp-action="Index" class="brand"><span class="brand-mark"><i data-lucide="book-open" aria-hidden="true"></i></span>Librarium</a>
+                <button class="icon-button d-lg-none" type="button" data-bs-dismiss="offcanvas" data-bs-target="#app-navigation" aria-label="Close navigation" title="Close navigation"><i data-lucide="x" aria-hidden="true"></i></button>
+            </div>
+            <nav class="sidebar-nav" aria-label="Library">
+                @foreach (var link in links)
+                {
+                    <a asp-controller="@link.Controller" asp-action="Index" class="sidebar-link @(controller == link.Controller ? "active" : "")" aria-current="@(controller == link.Controller ? "page" : null)">
+                        <i data-lucide="@link.Icon" aria-hidden="true"></i><span>@link.Label</span>
+                    </a>
+                }
+            </nav>
+            <div class="sidebar-account">
+                <div class="account-info"><span class="avatar">@initial</span><div><strong>@name</strong><small>@role</small></div></div>
+                <form asp-controller="Account" asp-action="Logout" method="post">
+                    <button type="submit" class="sidebar-link"><i data-lucide="log-out" aria-hidden="true"></i>Sign out</button>
+                </form>
+            </div>
+        </aside>
+    }
+    <div class="@(signedIn ? "workspace-body" : "auth-shell")">
+        @if (signedIn)
+        {
+            <header class="workspace-topbar">
+                <div class="topbar-title">
+                    <button class="icon-button d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#app-navigation" aria-controls="app-navigation" aria-label="Open navigation" title="Open navigation"><i data-lucide="menu" aria-hidden="true"></i></button>
+                    <span>@ViewData["Title"]</span>
+                </div>
+                <div class="topbar-account"><span class="role-badge role-@role.ToLowerInvariant()">@role</span><span class="avatar">@initial</span><span class="account-name">@name</span></div>
+            </header>
+        }
+        else
+        {
+            <aside class="auth-brand-panel">
+                <a asp-controller="Home" asp-action="Index" class="brand"><span class="brand-mark"><i data-lucide="book-open" aria-hidden="true"></i></span>Librarium</a>
+                <div class="auth-brand-heading">
+                    <h2>Your library,<br />managed with clarity.</h2>
+                    <p class="auth-caption">A complete system for managing books, members, borrowings, and payments - built for daily library operations.</p>
+                </div>
+                <vc:library-stats />
+            </aside>
+        }
+        <main id="main-content" class="@(signedIn ? "page-content" : "auth-content")" tabindex="-1">
+            @if (!signedIn && action == "Register")
+            {
+                <a asp-controller="Home" asp-action="Index" class="brand register-brand"><span class="brand-mark"><i data-lucide="book-open" aria-hidden="true"></i></span>Librarium</a>
+            }
+            @RenderBody()
+        </main>
+        @if (signedIn)
+        {
+            <footer class="workspace-footer">&copy; 2026 Librarium</footer>
+        }
+    </div>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/lucide/lucide.min.js" asp-append-version="true"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @if (signedIn && action == "Index")
+    {
+        <partial name="_ValidationScriptsPartial" />
+    }
+    @await RenderSectionAsync("Scripts", required: false)
+    <script src="~/js/interactions.js" asp-append-version="true"></script>
+    <script src="~/js/book-covers.js" asp-append-version="true"></script>
+</body>
+</html>

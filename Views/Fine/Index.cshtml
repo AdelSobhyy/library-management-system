@@ -1,0 +1,68 @@
+@model IEnumerable<Lib_System.Models.Fine>
+
+@{
+    ViewData["Title"] = "Fines";
+}
+
+<div class="page-header">
+    <h1>@(User.IsInRole("Member") ? "My Fines" : "Fines")</h1>
+</div>
+
+<form asp-action="Index" method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <select name="status" class="form-select" aria-label="Fine status">
+            <option value="">All statuses</option>
+            <option value="Unpaid" selected="@(ViewBag.Status == "Unpaid")">Unpaid</option>
+            <option value="Paid" selected="@(ViewBag.Status == "Paid")">Paid</option>
+            <option value="Waived" selected="@(ViewBag.Status == "Waived")">Waived</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-secondary">Filter</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">Clear</a>
+    </div>
+</form>
+
+<table class="table table-striped table-bordered">
+    <thead>
+        <tr>
+            <th>Borrowing</th>
+            <th>Book</th>
+            <th>Member</th>
+            <th>Amount</th>
+            <th>Fine Date</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+@foreach (var item in Model)
+{
+        <tr>
+            <td>#@item.BorrowingId</td>
+            <td>@(item.Borrowing?.Book?.Title ?? "-")</td>
+            <td>@(item.Borrowing?.User?.Name ?? "-")</td>
+            <td>@item.Amount.ToUsd()</td>
+            <td>@item.FineDate.ToString("yyyy-MM-dd")</td>
+            <td>@item.Reason</td>
+            <td>
+                <span class="badge bg-@(item.Status == "Paid" ? "success" : item.Status == "Unpaid" ? "danger" : "secondary")">
+                    @item.Status
+                </span>
+            </td>
+            <td>
+                <a asp-action="Details" asp-route-id="@item.FineId" class="btn btn-sm btn-info">Details</a>
+                @if (item.Status == "Unpaid" && User.IsInRole("Member"))
+                {
+                    <a asp-action="Details" asp-route-id="@item.FineId" class="btn btn-sm btn-primary">Pay Fine</a>
+                }
+                @if (item.Status == "Unpaid" && item.PaymentMethod == "Cash" && item.PaymentStatus == "Pending" && User.IsInRole("Manager"))
+                {
+                    <a asp-action="Details" asp-route-id="@item.FineId" class="btn btn-sm btn-warning">Review Cash Payment</a>
+                }
+            </td>
+        </tr>
+}
+    </tbody>
+</table>

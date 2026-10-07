@@ -1,0 +1,56 @@
+@model Lib_System.Models.Book
+
+@{
+    ViewData["Title"] = "Delete Book";
+}
+
+<h1>Delete Book</h1>
+
+<h3 class="text-danger">Are you sure you want to delete this book?</h3>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger">
+        @foreach (var error in ViewData.ModelState.SelectMany(ms => ms.Value?.Errors ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.ModelBinding.ModelError>()))
+        {
+            <p class="mb-0">@error.ErrorMessage</p>
+        }
+    </div>
+}
+
+<div>
+    <dl class="row">
+        <dt class="col-sm-3">Title</dt>
+        <dd class="col-sm-9">@Model.Title</dd>
+
+        <dt class="col-sm-3">ISBN</dt>
+        <dd class="col-sm-9">@Model.ISBN</dd>
+
+        <dt class="col-sm-3">Category</dt>
+        <dd class="col-sm-9">@(Model.Category?.Name ?? "-")</dd>
+    </dl>
+</div>
+
+@{
+    var borrowings = Model.Borrowings ?? Enumerable.Empty<Lib_System.Models.Borrowing>();
+    bool hasAnyBorrowings = borrowings.Any();
+    bool hasActiveBorrowings = borrowings.Any(b => b.Status is "Reserved" or "Borrowed" or "Early Return Requested");
+    bool protectedStatus = Model.AvailabilityStatus is "Borrowed" or "Reserved";
+}
+
+<form asp-action="Delete">
+    <input type="hidden" asp-for="BookId" />
+    <input type="submit" value="Delete" class="btn btn-danger" disabled="@((hasActiveBorrowings || protectedStatus || !ViewData.ModelState.IsValid) ? "disabled" : null)" />
+    <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+</form>
+
+@if (hasAnyBorrowings && !hasActiveBorrowings)
+{
+    <p class="text-muted mt-2">
+        <em>Note: This book has past borrowing history. It can be deleted because there are no active reservations or borrowings.</em>
+    </p>
+}
+@if (hasActiveBorrowings)
+{
+    <p class="text-danger mt-2">This book cannot be deleted because it has an active reservation or borrowing.</p>
+}

@@ -1,0 +1,57 @@
+@model IEnumerable<Lib_System.Models.User>
+
+@{
+    ViewData["Title"] = "Users";
+}
+
+<div class="page-header">
+<h1>Users</h1>
+
+@if (User.IsInRole("Admin"))
+{
+    <a asp-action="Create" class="btn btn-primary"><i data-lucide="plus" aria-hidden="true"></i>Add User</a>
+}
+</div>
+
+<table class="table table-striped table-bordered">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+@foreach (var item in Model)
+{
+        <tr>
+            <td>@item.Name</td>
+            <td>@item.Email</td>
+            <td>@item.Username</td>
+            <td>@(item.Role?.RoleName ?? "-")</td>
+            <td>
+                <span class="badge bg-@(item.Status == "Active" ? "success" : item.Status == "Suspended" ? "danger" : "secondary")">
+                    @item.Status
+                </span>
+            </td>
+            <td>
+                <a asp-action="Details" asp-route-id="@item.UserId" class="btn btn-sm btn-info">Details</a>
+                @if (User.IsInRole("Admin"))
+                {
+                <a asp-action="Edit" asp-route-id="@item.UserId" class="btn btn-sm btn-warning">Edit</a>
+                <a asp-action="Deactivate" asp-route-id="@item.UserId" class="btn btn-sm btn-danger">Change Status</a>
+                @if (item.Status != "Active")
+                {
+                    <form asp-action="Reactivate" asp-route-id="@item.UserId" method="post" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-success">Reactivate</button>
+                    </form>
+                }
+                }
+            </td>
+        </tr>
+}
+    </tbody>
+</table>

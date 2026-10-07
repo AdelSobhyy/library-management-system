@@ -1,0 +1,56 @@
+@model IEnumerable<Lib_System.Models.Category>
+
+@{
+    ViewData["Title"] = "Categories";
+}
+
+<div class="page-header">
+<h1>Categories</h1>
+
+@if (User.IsInRole("Manager"))
+{
+    <a asp-action="Create" class="btn btn-primary"><i data-lucide="plus" aria-hidden="true"></i>Add Category</a>
+}
+</div>
+
+@if (TempData["Message"] != null)
+{
+    <div class="alert alert-success toast">@TempData["Message"]</div>
+}
+
+<input type="search" id="category-search" class="form-control mb-3" placeholder="Search categories..." aria-label="Search categories" />
+
+<div class="panel category-list" id="category-list">
+@foreach (var item in Model)
+{
+    <div class="category-row">
+        <div class="category-info">
+            <a asp-action="Details" asp-route-id="@item.CategoryId">@item.Name</a>
+            <p>@(string.IsNullOrWhiteSpace(item.Description) ? "No description yet." : item.Description)</p>
+        </div>
+        <a asp-action="Details" asp-route-id="@item.CategoryId" class="category-count">@item.Books.Count book@(item.Books.Count == 1 ? "" : "s")</a>
+        <div class="category-actions">
+            @if (User.IsInRole("Manager"))
+            {
+                <a asp-action="Edit" asp-route-id="@item.CategoryId" class="row-icon edit" title="Edit" aria-label="Edit"><i data-lucide="pencil" aria-hidden="true"></i></a>
+                <a asp-action="Delete" asp-route-id="@item.CategoryId" class="row-icon delete" title="Delete" aria-label="Delete"><i data-lucide="trash-2" aria-hidden="true"></i></a>
+            }
+        </div>
+    </div>
+}
+@if (!Model.Any())
+{
+    <p class="empty-state">No categories yet.</p>
+}
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('category-search')?.addEventListener('input', event => {
+            const query = event.target.value.trim().toLocaleLowerCase();
+            document.querySelectorAll('#category-list .category-row').forEach(row => {
+                row.hidden = !row.textContent.toLocaleLowerCase().includes(query);
+            });
+        });
+    </script>
+}

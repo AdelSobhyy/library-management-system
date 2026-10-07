@@ -1,0 +1,42 @@
+@model Lib_System.Models.Borrowing
+
+@{
+    var isEarlyReturnRequest = User.IsInRole("Member") && Model.Status == "Borrowed" && DateTime.Today < Model.DueDate.Date;
+    ViewData["Title"] = isEarlyReturnRequest ? "Request Early Return" : "Return Book";
+}
+
+<h1>@ViewData["Title"]</h1>
+
+<div asp-validation-summary="ModelOnly" class="text-danger"></div>
+@foreach (var fine in Model.Fines.Where(f => f.Status == "Unpaid").OrderByDescending(f => f.FineId))
+{
+    <p><a asp-controller="Fine" asp-action="Details" asp-route-id="@fine.FineId">Pay outstanding fine: @fine.Amount.ToUsd()</a></p>
+}
+
+<div class="alert alert-info">
+    @if (isEarlyReturnRequest)
+    {
+        <span>Request the manager's approval to return <strong>@Model.Book?.Title</strong> before the due date.</span>
+    }
+    else
+    {
+        <span>Confirm the return of <strong>@Model.Book?.Title</strong>, borrowed by <strong>@Model.User?.Name</strong>.</span>
+    }
+</div>
+
+<dl class="row">
+    <dt class="col-sm-3">Borrow Date</dt>
+    <dd class="col-sm-9">@Model.BorrowDate.ToString("yyyy-MM-dd")</dd>
+
+    <dt class="col-sm-3">Due Date</dt>
+    <dd class="col-sm-9">@Model.DueDate.ToString("yyyy-MM-dd")</dd>
+
+    <dt class="col-sm-3">Current Status</dt>
+    <dd class="col-sm-9">@Model.Status</dd>
+</dl>
+
+<form asp-action="Return">
+    <input type="hidden" asp-for="BorrowingId" />
+    <input type="submit" value="@(isEarlyReturnRequest ? "Send Request" : "Confirm Return")" class="btn btn-success" />
+    <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+</form>
